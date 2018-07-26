@@ -1,0 +1,331 @@
+
+<link rel="stylesheet" href="/client/css/style.css">
+<div id="wrapper">
+  <div id="left">
+    <canvas id="renderer" width="750" height="500"></canvas>
+  </div>
+  <div id="right">
+    <div id="chat">
+      <div id="header">Chat here</div>
+    </div>
+    <form id="chatform">
+      <input id="chatinput" type="text" placeholder="type your message here">
+    </form>
+    <div id="lobby">
+      <p id="lobby-list"></p>
+    </div>
+  </div>
+</div>
+
+
+<script type="text/javascript" src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+<script type="text/javascript" src="/client/js/camera.js">
+</script>
+<script type="text/javascript">
+//imgs===========================================
+
+var Img = {};
+Img.player = new Image();
+Img.player.src = "/client/img/player.png";
+Img.bullet = new Image();
+Img.bullet.src = "/client/img/bullet.png";
+Img.map = new Image();
+Img.map.src = "/client/img/map.png";
+Img.enemy = new Image();
+Img.enemy.src = "/client/img/enemy.gif";
+//===============================================
+
+    var socket = io();
+    var selfId = null;
+    var WIDTH = 750;
+    var HEIGHT = 500;
+    var canvas = document.getElementById("renderer");
+    var context = canvas.getContext('2d');
+    context.font = "30px Arial";
+
+  // chat ============================================================================================
+  var chatInput = document.getElementById("chatinput");
+  var chatForm = document.getElementById("chatform");
+  var chatBox = document.getElementById("chat");
+  var lobby = document.getElementById("lobby-list");
+
+  const clamp = (n, lo, hi) => n < lo ? lo : n > hi ? hi : n;
+  const viewport = {};
+
+  socket.on("addToChat", function(data){
+    chatBox.innerHTML += "<div>" + data.player + ": " + data.message + "</div>";
+  });
+
+  chatForm.onsubmit = function(event){
+    event.preventDefault();
+    if( chatInput.value[0] == '/'){
+      socket.emit("evalServer", chatInput.value.slice(1));
+    }
+    else{
+      socket.emit("sendMessageToServer", chatInput.value);
+    }
+    chatInput.value = ' ';
+  }
+
+  socket.on("evalAnsw", function(data){
+    console.log(data);
+  })
+
+  socket.on("lobbylist", function(data){
+    lobby.innerHTML = 'In Lobby: ';
+    for(var i in data){
+      lobby.innerHTML += "<p>" + data[i].number + "</p>,   ";
+    }
+  });
+  // chat ===========================================================================================================
+
+  var drawMap = function(){
+
+    context.drawImage(Img.map, viewport.x, viewport.y);
+
+    //context.drawImage(Img.map, viewport.x, viewport.y);
+
+}
+
+
+
+  //game ================================================================================================================
+  var Player = function(initPack){
+    var self = {};
+    self.id = initPack.id;
+    self.number = initPack.number;
+    self.x = initPack.x;
+    self.y = initPack.y;
+    self.hp = initPack.hp;
+    self.hpMax = initPack.hpMax;
+
+    self.draw = function(){
+      var width = Img.player.width/1.5; //54
+      var height = Img.player.height/1.5; //67
+      var hpWidth = 30 * self.hp / self.hpMax; //linear fraction, by pixel
+      context.fillStyle = 'red';
+      context.fillRect(self.x+viewport.x+ (hpWidth/2) -5, self.y+viewport.y-5, hpWidth, 4);
+      context.drawImage(Img.player, 0,0, Img.player.width, Img.player.height, self.x+viewport.x, self.y+viewport.y, width, height);
+    }
+    Player.list[self.id] = self;
+    return self;
+  }
+  Player.list = {};
+
+  var Bullet = function(initPack){
+    var self = {};
+    self.id = initPack.id;
+    self.x = initPack.x;
+    self.y = initPack.y;
+
+    self.draw = function(){
+      var width = Img.bullet.width/1.2;
+      var height = Img.bullet.height/1.2;
+
+      context.drawImage(Img.bullet, 0,0,Img.bullet.width, Img.bullet.height, self.x+viewport.x+5, self.y+viewport.y + 20, width, height);
+
+    }
+
+    Bullet.list[self.id] = self;
+    return self;
+  }
+  Bullet.list = {};
+
+  var Enemy = function(initPack){
+    var self = {};
+    self.id = initPack.id;
+    self.x = initPack.x;
+    self.y = initPack.y;
+    self.hp = initPack.hp;
+    self.maxHp = initPack.maxHp;
+
+    self.draw = function(){
+      var width = Img.enemy.width/1.7; //54
+      var height = Img.enemy.height/1.7; //67
+      var hpWidth = 30 * self.hp / self.maxHp; //linear fraction, by pixel
+      context.fillStyle = 'red';
+      context.fillRect(self.x+viewport.x+ (hpWidth/2), self.y+viewport.y - 20, hpWidth, 4);
+      context.fillStyle = 'black';
+      context.drawImage(Img.enemy, 0,0, Img.enemy.width, Img.enemy.height, self.x+viewport.x-35, self.y+viewport.y - 35, width, height);
+    //  context.fillRect(self.x + viewport.x,self.y + viewport.y, width, height);
+    }
+    Enemy.list[self.id] = self;
+    return self;
+  }
+  Enemy.list = {};
+
+// ===============================================================================
+  //===================================================================================
+
+  socket.on("init", function(data){
+    if( data.selfId ){
+      selfId = data.selfId;
+    }
+
+    for( var i = 0; i<data.player.length; i++){
+          var play = new Player(data.player[i]);
+    }
+
+    for( var i = 0; i<data.bullet.length; i++){
+      new Bullet(data.bullet[i]);
+    }
+    for( var i = 0; i<data.enemy.length; i++){
+      new Enemy(data.enemy[i]);
+    }
+  });
+
+
+  socket.on("update", function(data){
+    for( var i = 0; i<data.player.length; i++){
+      var pack = data.player[i];
+      var p = Player.list[pack.id];
+      if(p){
+        if(pack.x !== undefined){
+          p.x = pack.x;
+        }
+        if(pack.y !== undefined){
+          p.y = pack.y;
+        }
+        if( pack.hp !== undefined){
+          p.hp = pack.hp;
+        }
+      }
+    }
+    for( var i = 0; i<data.bullet.length; i++){
+      var pack = data.bullet[i];
+      var b = Bullet.list[pack.id];
+      if(b){
+        if(pack.x !== undefined){
+          b.x = pack.x;
+        }
+        if(pack.y !== undefined){
+          b.y = pack.y;
+        }
+
+      }
+    }
+    for( var i = 0; i<data.enemy.length; i++){
+      var pack = data.enemy[i];
+      var e = Enemy.list[pack.id];
+      if(e){
+        if(pack.x !== undefined){
+          e.x = pack.x;
+        }
+        if(pack.y !== undefined){
+          e.y = pack.y;
+        }
+        if( pack.hp !== undefined){
+          e.hp = pack.hp;
+        }
+
+      }
+    }
+  });
+
+  socket.on("remove", function(data){
+    for( var i = 0; i<data.player.length; i++){
+      delete Player.list[data.player[i]];
+    }
+    for( var i = 0; i<data.bullet.length; i++){
+      delete Bullet.list[data.bullet[i]];
+    }
+  });
+
+  var drawMyInfo = function(){
+    context.fillStyle = 'white';
+    context.fillText("ID: " + Player.list[selfId].number, 0, 30);
+    context.fillText("x-val: " + Player.list[selfId].x, 0, 60);
+    context.fillText("y-val: " + Player.list[selfId].y, 0, 90);
+    context.fillText("HP: " + Player.list[selfId].hp, 0, 120);
+  }
+
+/*
+  setInterval(function(){
+    if(!selfId){
+      return;
+    }
+    context.clearRect(0,0,canvas.width, canvas.height);
+    viewport.x = clamp( -Player.list[selfId].x + canvas.width / 2, canvas.width - 894, 0);
+    viewport.y = clamp(-Player.list[selfId].y + canvas.height / 2, canvas.height - 864, 0);
+    drawMap();
+    drawMyInfo();
+    for( var i in Player.list){
+      Player.list[i].draw();
+    }
+    for( var i in Enemy.list){
+      Enemy.list[i].draw();
+    }
+    for( var i in Bullet.list){
+      Bullet.list[i].draw();
+    }
+  }, 40);
+  */
+  function run(res){
+    requestAnimationFrame(run);
+
+    if(!selfId){
+      return;
+    }
+    context.clearRect(0,0,canvas.width, canvas.height);
+    viewport.x = clamp( -Player.list[selfId].x + canvas.width / 2, canvas.width - 894, 0);
+    viewport.y = clamp(-Player.list[selfId].y + canvas.height / 2, canvas.height - 864, 0);
+    drawMap();
+    drawMyInfo();
+    for( var i in Player.list){
+      Player.list[i].draw();
+    }
+    for( var i in Enemy.list){
+      Enemy.list[i].draw();
+    }
+    for( var i in Bullet.list){
+      Bullet.list[i].draw();
+    }
+
+  }
+    var ID = requestAnimationFrame(run); //runs game
+
+  document.onkeydown = function(event){
+    if( event.keyCode == 68){
+      socket.emit("keyPress", {id: 'right', state: true});
+    }
+    if( event.keyCode == 83){
+      socket.emit("keyPress", {id: 'down', state: true});
+    }
+    if( event.keyCode == 65){
+      socket.emit("keyPress", {id: 'left', state: true});
+    }
+    if( event.keyCode == 87){
+      socket.emit("keyPress", {id: 'up', state: true});
+    }
+  }
+
+  document.onkeyup = function(event){
+    if( event.keyCode == 68){
+      socket.emit("keyPress", {id: 'right', state: false});
+    }
+    if( event.keyCode == 83){
+      socket.emit("keyPress", {id: 'down', state: false});
+    }
+    if( event.keyCode == 65){
+      socket.emit("keyPress", {id: 'left', state: false});
+    }
+    if( event.keyCode == 87){
+      socket.emit("keyPress", {id: 'up', state: false});
+    }
+  }
+
+  document.onmousedown = function(event){
+    socket.emit('keyPress', { id: "attack", state: true});
+  }
+
+  document.onmouseup = function(event){
+    socket.emit('keyPress', { id: "attack", state: false});
+  }
+  document.onmousemove = function(event){
+    var x = -250 + event.clientX - 8;
+    var y = -250 + event.clientY - 8;
+    var angle = Math.atan2(y,x) / Math.PI * 180;
+    socket.emit("keyPress", {id: "mouseAngle", state: angle});
+  }
+
+</script>
