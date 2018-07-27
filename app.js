@@ -42,8 +42,8 @@ var Entity = function(){
 var Enemy = function(){
   var self = Entity();
   self.id = Math.random();
-  self.x = 200;
-  self.y = 160;
+  self.x = Math.random() * 500;
+  self.y = Math.random() * 500;
   self.hp = 30;
   self.maxHp = 30;
   self.maxSpd = 15;
@@ -210,6 +210,13 @@ Player.list = {};
 var initPack = {player: [], bullet: [], enemy: []};
 var removePack = {player: [], bullet: [], enemy: []};
 var monster = new Enemy();
+var monster1 = new Enemy();
+var monster2 = new Enemy();
+var monster3 = new Enemy();
+var monster4 = new Enemy();
+var monster5 = new Enemy();
+
+
 
 
 Player.onConnect = function(socket){
