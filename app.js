@@ -295,8 +295,8 @@ var Bullet = function(parent, angle){
           p.hp = p.hp - .5;
           if( p.hp <= 0){
             p.hp = p.hpMax;
-            p.x = 413;
-            p.y = 260;
+            p.x = Math.random() * 500;
+            p.y = Math.random() * 500;
           }
           self.toRemove = true;
         }
